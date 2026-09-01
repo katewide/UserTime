@@ -1,0 +1,6 @@
+{
+  "name": "task-time-report",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.js" }
+}

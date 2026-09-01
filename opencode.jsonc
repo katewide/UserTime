@@ -1,0 +1,77 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "openwork-browser": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64883/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "chrome": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64884/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "bitrix24": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64886/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "attachments": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64888/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "memory": {
+      "type": "remote",
+      "url": "http://127.0.0.1:57173/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "b24-cowork-memory": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64890/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    },
+    "vibecode": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64887/mcp?ws=%2FUsers%2Fekaterinafeneva%2F.local%2Fshare%2Fbitrix24-cowork%2Fcode%2Fc7703cf909c4ec60",
+      "headers": {
+        "Authorization": "Bearer {env:B24_COWORK_MCP_TOKEN}"
+      }
+    }
+  },
+  "agent": {
+    "b24cowork": {
+      "tools": {
+        "memory_*": false,
+        "b24-cowork-memory_*": true
+      },
+      "permission": {
+        "memory_*": "deny",
+        "b24-cowork-memory_*": "allow"
+      }
+    },
+    "code": {
+      "tools": {
+        "memory_*": true,
+        "b24-cowork-memory_*": false
+      },
+      "permission": {
+        "memory_*": "allow",
+        "b24-cowork-memory_*": "deny"
+      }
+    }
+  },
+  "default_agent": "b24cowork"
+}
