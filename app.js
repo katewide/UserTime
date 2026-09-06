@@ -3,8 +3,21 @@ function positiveInteger(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-// Useful for local development and direct links. In the portal, the placement
-// context below is the source of truth.
+// VibeCode's placement handler forwards Bitrix24's PLACEMENT_OPTIONS as the
+// lowercase placement_options URL parameter. Read it first: after the handler
+// redirect the native BX24 SDK has no parent-window context and BX24.init()
+// never completes.
+function getTaskIdFromPlacementUrl() {
+  const params = new URLSearchParams(window.location.search);
+  try {
+    const options = JSON.parse(params.get("placement_options") || "{}");
+    return positiveInteger(options?.taskId);
+  } catch {
+    return null;
+  }
+}
+
+// Useful for local development and manually composed direct links.
 function getTaskIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   for (const key of ["taskId", "ID", "id", "ENTITY_ID"]) {
@@ -14,34 +27,8 @@ function getTaskIdFromUrl() {
   return null;
 }
 
-// TASK_VIEW_TAB sends { taskId, URI } in PLACEMENT_OPTIONS. BX24.init is
-// asynchronous, so the report must wait until the frame SDK is ready.
-function getTaskIdFromPlacement() {
-  return new Promise((resolve) => {
-    if (!window.BX24?.ready || !window.BX24?.init || !window.BX24?.placement) {
-      resolve(null);
-      return;
-    }
-
-    try {
-      window.BX24.ready(() => {
-        window.BX24.init(() => {
-          try {
-            const info = window.BX24.placement.info();
-            resolve(positiveInteger(info?.options?.taskId));
-          } catch {
-            resolve(null);
-          }
-        });
-      });
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-async function getTaskId() {
-  return (await getTaskIdFromPlacement()) || getTaskIdFromUrl();
+function getTaskId() {
+  return getTaskIdFromPlacementUrl() || getTaskIdFromUrl();
 }
 
 async function loadReport(taskId) {
@@ -135,4 +122,4 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-getTaskId().then(loadReport);
+loadReport(getTaskId());
