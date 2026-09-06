@@ -3,48 +3,52 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Учёт времени по задачам</title>
+    <title>Учёт времени по задаче</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="grain" aria-hidden="true"></div>
-
     <main class="shell">
       <header class="masthead">
-        <div class="masthead__kicker">Учёт времени · карточка задачи</div>
-        <div class="masthead__row">
-          <h1 class="masthead__title" id="taskTitle">Задача</h1>
-          <div class="masthead__total">
-            <span class="masthead__total-label">Учтено времени</span>
-            <span class="masthead__total-value" id="totalValue">—</span>
-          </div>
-        </div>
-        <p class="masthead__note" id="note">
-          Сколько времени каждый сотрудник учёл по этой задаче — на текущий момент.
-        </p>
+        <div class="eyebrow">Учёт времени по задаче</div>
+        <div class="task-id" id="taskId">Задача</div>
+        <h1 class="task-title" id="taskTitle">Загружаем…</h1>
       </header>
 
-      <section class="panel">
+      <section class="summary" aria-label="Сводка времени">
+        <div class="summary__main">
+          <span>Всего времени</span>
+          <strong id="totalValue">—</strong>
+        </div>
+        <dl class="summary__details">
+          <div><dt>ЭЛРОС</dt><dd id="elrosValue">—</dd></div>
+          <div><dt>Обучение</dt><dd id="trainingValue">—</dd></div>
+          <div><dt>ВРБ</dt><dd id="vrbValue">—</dd></div>
+        </dl>
+        <div class="summary__clean">
+          <span>Чистое время</span>
+          <strong id="cleanValue">—</strong>
+          <small>Всего времени за вычетом ЭЛРОС и Обучения</small>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="employeesTitle">
         <div class="panel__head">
-          <h2 class="panel__title">Сотрудники</h2>
+          <div>
+            <p class="eyebrow">По сотрудникам</p>
+            <h2 id="employeesTitle">Время по отделам</h2>
+          </div>
           <span class="panel__meta" id="meta">загружаем…</span>
         </div>
-
         <div class="state" id="state" hidden></div>
-
-        <ol class="leaderboard" id="leaderboard"></ol>
+        <div id="departments" class="departments"></div>
       </section>
     </main>
-
-    <!-- The Bitrix24 frame SDK provides TASK_VIEW_TAB placement options,
-         including the ID of the task currently open in the portal. -->
-    <script src="https://api.bitrix24.com/api/v1/"></script>
     <script src="/app.js"></script>
   </body>
 </html>
