@@ -3,10 +3,6 @@ function positiveInteger(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-// VibeCode's placement handler forwards Bitrix24's PLACEMENT_OPTIONS as the
-// lowercase placement_options URL parameter. Read it first: after the handler
-// redirect the native BX24 SDK has no parent-window context and BX24.init()
-// never completes.
 function getTaskIdFromPlacementUrl() {
   const params = new URLSearchParams(window.location.search);
   try {
@@ -17,7 +13,6 @@ function getTaskIdFromPlacementUrl() {
   }
 }
 
-// Useful for local development and manually composed direct links.
 function getTaskIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   for (const key of ["taskId", "ID", "id", "ENTITY_ID"]) {
@@ -31,95 +26,106 @@ function getTaskId() {
   return getTaskIdFromPlacementUrl() || getTaskIdFromUrl();
 }
 
-async function loadReport(taskId) {
-  const state = document.getElementById("state");
-  const meta = document.getElementById("meta");
-  const list = document.getElementById("leaderboard");
-  const totalValue = document.getElementById("totalValue");
-  const taskTitleEl = document.getElementById("taskTitle");
-
-  list.innerHTML = "";
-  state.hidden = true;
-  meta.textContent = "загружаем…";
-
-  if (!taskId) {
-    meta.textContent = "нет задачи";
-    taskTitleEl.textContent = "Откройте задачу";
-    state.hidden = false;
-    state.className = "state";
-    state.innerHTML =
-      "Вкладка открыта вне карточки задачи. Откройте её из карточки задачи в Bitrix24, чтобы увидеть затраченное время по сотрудникам.";
-    return;
-  }
-
-  let data;
-  try {
-    const res = await fetch(`/api/task-report?taskId=${taskId}`);
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(body?.error || `Ошибка ${res.status}`);
-    }
-    data = body;
-  } catch (err) {
-    meta.textContent = "не удалось загрузить";
-    state.hidden = false;
-    state.className = "state state--error";
-    state.innerHTML =
-      "<strong>Не удалось получить данные портала.</strong><br>" +
-      escapeHtml(err.message || "Неизвестная ошибка") +
-      '<br><button class="state__retry" id="retryBtn">Повторить</button>';
-    document
-      .getElementById("retryBtn")
-      .addEventListener("click", () => loadReport(taskId));
-    return;
-  }
-
-  taskTitleEl.textContent = data.taskTitle || `Задача ${data.taskId}`;
-  totalValue.textContent = data.totalLabel || "—";
-  meta.textContent = `${data.rows.length} чел. · ${data.totalEntries ?? data.loadedEntries} записей времени`;
-
-  if (!data.rows || data.rows.length === 0) {
-    state.hidden = false;
-    state.className = "state";
-    state.innerHTML =
-      "По этой задаче пока нет записей затраченного времени — добавьте время во вкладке «Учёт времени» задачи.";
-    return;
-  }
-
-  const max = data.rows[0]?.seconds || 1;
-  data.rows.forEach((row, i) => {
-    const li = document.createElement("li");
-    li.className = "row";
-    li.style.animationDelay = `${i * 0.045}s`;
-
-    const share = Math.min(100, Math.round((row.seconds / max) * 100));
-    li.innerHTML = `
-      <div class="row__rank">${i + 1}</div>
-      <div class="row__body">
-        <div class="row__name">${escapeHtml(row.name)}</div>
-        <div class="row__delta">${row.entries} зап.</div>
-        <div class="row__bar">
-          <div class="row__bar-fill" data-w="${share}"></div>
-        </div>
-      </div>
-      <div class="row__time">${escapeHtml(row.label)}</div>
-    `;
-    list.appendChild(li);
-  });
-
-  requestAnimationFrame(() => {
-    list.querySelectorAll(".row__bar-fill").forEach((el) => {
-      el.style.width = el.dataset.w + "%";
-    });
-  });
+function formatHours(seconds) {
+  return `${(Number(seconds || 0) / 3600).toFixed(2).replace(".", ",")} ч`;
 }
 
-function escapeHtml(s) {
-  return String(s)
+function escapeHtml(value) {
+  return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function setSummary(report) {
+  document.getElementById("totalValue").textContent = formatHours(report.totalSeconds);
+  document.getElementById("elrosValue").textContent = formatHours(report.summary.elrosSeconds);
+  document.getElementById("trainingValue").textContent = formatHours(report.summary.trainingSeconds);
+  document.getElementById("vrbValue").textContent = formatHours(report.summary.vrbSeconds);
+  document.getElementById("cleanValue").textContent = formatHours(report.summary.cleanSeconds);
+}
+
+function renderEmployee(employee) {
+  const categoryRows = Object.entries(employee.categories)
+    .filter(([, value]) => value.seconds > 0)
+    .map(([name, value]) => `
+      <li><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong><small>${value.entries} зап.</small></li>
+    `)
+    .join("");
+  const details = categoryRows
+    ? `<details class="tags"><summary>Время с хештегами <span>${formatHours(Object.values(employee.categories).reduce((sum, item) => sum + item.seconds, 0))}</span></summary><ul>${categoryRows}</ul></details>`
+    : "";
+
+  return `
+    <article class="employee">
+      <div class="employee__top">
+        <h3>${escapeHtml(employee.name)}</h3>
+        <div class="employee__metric"><span>Всего</span><strong>${formatHours(employee.totalSeconds)}</strong></div>
+        <div class="employee__metric employee__metric--clean"><span>Чистое время</span><strong>${formatHours(employee.cleanSeconds)}</strong></div>
+      </div>
+      ${details}
+    </article>
+  `;
+}
+
+function renderDepartments(departments) {
+  const target = document.getElementById("departments");
+  target.innerHTML = departments
+    .map(
+      (department) => `
+        <section class="department">
+          <h2>${escapeHtml(department.name)}</h2>
+          <div class="employees">${department.employees.map(renderEmployee).join("")}</div>
+        </section>
+      `,
+    )
+    .join("");
+}
+
+async function loadReport(taskId) {
+  const state = document.getElementById("state");
+  const meta = document.getElementById("meta");
+  const target = document.getElementById("departments");
+  const taskTitle = document.getElementById("taskTitle");
+  const taskIdEl = document.getElementById("taskId");
+  target.innerHTML = "";
+  state.hidden = true;
+
+  if (!taskId) {
+    meta.textContent = "нет задачи";
+    taskTitle.textContent = "Откройте приложение из карточки задачи";
+    taskIdEl.textContent = "Контекст задачи не передан";
+    state.hidden = false;
+    state.innerHTML = "Чтобы увидеть расчёт, откройте приложение из блока «Приложения» в карточке задачи Bitrix24.";
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/task-report?taskId=${taskId}`);
+    const report = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(report?.error || `Ошибка ${response.status}`);
+
+    taskIdEl.textContent = `ID задачи ${report.taskId}`;
+    taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
+    setSummary(report);
+    const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
+    meta.textContent = `${employeeCount} чел. · ${report.totalEntries ?? report.loadedEntries} записей`;
+
+    if (employeeCount === 0) {
+      state.hidden = false;
+      state.innerHTML = "По этой задаче пока нет записей затраченного времени.";
+      return;
+    }
+    renderDepartments(report.departments);
+  } catch (error) {
+    meta.textContent = "не удалось загрузить";
+    taskTitle.textContent = "Данные недоступны";
+    state.hidden = false;
+    state.className = "state state--error";
+    state.innerHTML = `<strong>Не удалось получить данные портала.</strong><br>${escapeHtml(error.message || "Неизвестная ошибка")}<br><button class="state__retry" id="retryBtn">Повторить</button>`;
+    document.getElementById("retryBtn").addEventListener("click", () => loadReport(taskId));
+  }
 }
 
 loadReport(getTaskId());
