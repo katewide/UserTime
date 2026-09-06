@@ -43,6 +43,8 @@ function setSummary(report) {
   document.getElementById("elrosValue").textContent = formatHours(report.summary.elrosSeconds);
   document.getElementById("trainingValue").textContent = formatHours(report.summary.trainingSeconds);
   document.getElementById("vrbValue").textContent = formatHours(report.summary.vrbSeconds);
+  document.getElementById("vrb15Value").textContent = formatHours(report.summary.vrb15Seconds);
+  document.getElementById("vrb2Value").textContent = formatHours(report.summary.vrb2Seconds);
   document.getElementById("cleanValue").textContent = formatHours(report.summary.cleanSeconds);
 }
 
@@ -50,7 +52,7 @@ function renderEmployee(employee) {
   const categoryRows = Object.entries(employee.categories)
     .filter(([, value]) => value.seconds > 0)
     .map(([name, value]) => `
-      <li><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong><small>${value.entries} зап.</small></li>
+      <li><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong></li>
     `)
     .join("");
   const details = categoryRows
@@ -106,7 +108,7 @@ async function loadReport(taskId) {
     const report = await response.json().catch(() => null);
     if (!response.ok) throw new Error(report?.error || `Ошибка ${response.status}`);
 
-    taskIdEl.textContent = `ID задачи ${report.taskId}`;
+    taskIdEl.textContent = `ID ${report.taskId}`;
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
