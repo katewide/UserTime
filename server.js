@@ -6,10 +6,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Loads `.env` for a LOCAL run, searching upwards from this file's directory —
-// never relative to the working directory. On the deployed server there is no
-// `.env` (excluded from the archive) and the three managed variables already
-// arrive via the process environment, so this is a no-op there.
 function loadEnvUpwards(startDir, maxLevels = 4) {
   let dir = path.resolve(startDir);
   for (let level = 0; level <= maxLevels; level += 1) {
@@ -41,7 +37,8 @@ const ENV_FILE = loadEnvUpwards(__dirname);
 const PORT = process.env.PORT || 3000;
 const BASE = process.env.BITRIX_API_BASE_URL || "";
 const KEY = process.env.BITRIX_API_KEY || "";
-const PUBLIC_DIR = path.join(__dirname, "public");
+// The deployed archive keeps index.html, app.js and styles.css in its root.
+const PUBLIC_DIR = __dirname;
 
 console.log(
   KEY
@@ -49,8 +46,6 @@ console.log(
     : `NO portal key — /api/report will answer 503 until it appears`,
 );
 
-// Simple TTL cache: the portal rate-limits per key, so cache the aggregated
-// report briefly to keep shared-key usage low.
 const cache = new Map();
 async function cached(key, ttlMs, produce) {
   const hit = cache.get(key);
@@ -84,8 +79,6 @@ async function portal(pathname, { method = "GET" } = {}) {
   return body;
 }
 
-// Fetch all time entries of ONE task with page-based pagination.
-// Every entry carries userId + seconds; meta.total marks the final page.
 async function fetchTaskTimeEntries(taskId) {
   const limit = 50;
   let offset = 0;
@@ -96,15 +89,10 @@ async function fetchTaskTimeEntries(taskId) {
       limit: String(limit),
       offset: String(offset),
     });
-    // The nested endpoint makes the task boundary explicit: it cannot return
-    // time entries belonging to a different task.
     const body = await portal(`/tasks/${taskId}/time?${params.toString()}`);
     const rows = Array.isArray(body?.data) ? body.data : [];
     if (total === null) total = body?.meta?.total ?? null;
     entries.push(...rows);
-    // The time endpoint returns meta.total, not meta.hasMore.
-    // Continue until that total is reached; the short-page condition is a
-    // defensive fallback for older/partial API responses.
     if (
       rows.length === 0 ||
       (Number.isFinite(total) && entries.length >= total) ||
@@ -117,7 +105,6 @@ async function fetchTaskTimeEntries(taskId) {
   return { entries, total };
 }
 
-// Map user id -> display name. Falls back to "ID …" when a profile is missing.
 async function fetchUserNames() {
   const body = await portal("/users");
   const users = Array.isArray(body?.data) ? body.data : [];
@@ -149,8 +136,6 @@ async function buildTaskReport(taskId) {
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
-
-  // Aggregate seconds per user across the task's entries.
   const byUser = new Map();
   for (const e of entries) {
     const uid = String(e?.userId ?? "");
@@ -202,7 +187,6 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "Укажите задачу (taskId)" }));
         return;
       }
-      // Cache briefly per task — pulls all time entries of the task.
       const report = await cached(`report:${taskId}`, 30_000, () =>
         buildTaskReport(taskId),
       );
@@ -223,7 +207,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Static files — served only from PUBLIC_DIR.
   const rel = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
   const isDotfile = rel.split("/").some((seg) => seg.startsWith("."));
   const filePath = path.resolve(PUBLIC_DIR, rel);
