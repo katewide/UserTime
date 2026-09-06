@@ -114,11 +114,16 @@ async function fetchTaskTimeEntries(taskId, authorization) {
 }
 
 async function fetchUserNames(authorization) {
-  const body = await portal("/users", { authorization });
+  // The default users page is small. Time entries may refer to employees with
+  // high IDs, so ask VibeCode to collect every employee page for this portal.
+  const body = await portal("/users?limit=5000", { authorization });
   const users = Array.isArray(body?.data) ? body.data : [];
   const map = new Map();
   for (const u of users) {
-    const name = [u?.name, u?.lastName].filter(Boolean).join(" ") || u?.login || "";
+    const name =
+      [u?.lastName, u?.name, u?.secondName].filter(Boolean).join(" ") ||
+      u?.login ||
+      "";
     map.set(String(u?.id), name || `ID ${u?.id}`);
   }
   return map;
