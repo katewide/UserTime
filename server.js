@@ -56,18 +56,24 @@ async function cached(key, ttlMs, produce) {
   return value;
 }
 
-async function portal(pathname, { method = "GET" } = {}) {
+async function portal(pathname, { method = "GET", authorization = "" } = {}) {
   if (!KEY || !BASE) {
     const err = new Error("portal_not_connected");
     err.status = 503;
     throw err;
   }
+  const headers = {
+    "X-Api-Key": KEY,
+    Accept: "application/json",
+  };
+  // In a Bitrix24 placement the VibeCode Gateway injects this short-lived
+  // per-user session into the server request. OAuth app keys require it for
+  // every API call; it is never exposed to browser JavaScript.
+  if (authorization) headers.Authorization = authorization;
+
   const res = await fetch(`${BASE}${pathname}`, {
     method,
-    headers: {
-      "X-Api-Key": KEY,
-      Accept: "application/json",
-    },
+    headers,
   });
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
@@ -79,7 +85,7 @@ async function portal(pathname, { method = "GET" } = {}) {
   return body;
 }
 
-async function fetchTaskTimeEntries(taskId) {
+async function fetchTaskTimeEntries(taskId, authorization) {
   const limit = 50;
   let offset = 0;
   const entries = [];
@@ -89,7 +95,9 @@ async function fetchTaskTimeEntries(taskId) {
       limit: String(limit),
       offset: String(offset),
     });
-    const body = await portal(`/tasks/${taskId}/time?${params.toString()}`);
+    const body = await portal(`/tasks/${taskId}/time?${params.toString()}`, {
+      authorization,
+    });
     const rows = Array.isArray(body?.data) ? body.data : [];
     if (total === null) total = body?.meta?.total ?? null;
     entries.push(...rows);
@@ -105,8 +113,8 @@ async function fetchTaskTimeEntries(taskId) {
   return { entries, total };
 }
 
-async function fetchUserNames() {
-  const body = await portal("/users");
+async function fetchUserNames(authorization) {
+  const body = await portal("/users", { authorization });
   const users = Array.isArray(body?.data) ? body.data : [];
   const map = new Map();
   for (const u of users) {
@@ -124,15 +132,15 @@ function formatDuration(totalSeconds) {
   return `${hours} ч ${minutes} мин`;
 }
 
-async function buildTaskReport(taskId) {
+async function buildTaskReport(taskId, authorization) {
   const [timeRes, taskRes] = await Promise.allSettled([
-    fetchTaskTimeEntries(taskId),
-    portal(`/tasks/${taskId}`),
+    fetchTaskTimeEntries(taskId, authorization),
+    portal(`/tasks/${taskId}`, { authorization }),
   ]);
 
   if (timeRes.status === "rejected") throw timeRes.reason;
   const { entries, total } = timeRes.value;
-  const names = await fetchUserNames();
+  const names = await fetchUserNames(authorization);
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
@@ -187,8 +195,16 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "Укажите задачу (taskId)" }));
         return;
       }
-      const report = await cached(`report:${taskId}`, 30_000, () =>
-        buildTaskReport(taskId),
+      const authorization =
+        typeof req.headers["x-vibe-authorization"] === "string"
+          ? req.headers["x-vibe-authorization"]
+          : "";
+      const userId =
+        typeof req.headers["x-vibe-user-id"] === "string"
+          ? req.headers["x-vibe-user-id"]
+          : "service";
+      const report = await cached(`report:${userId}:${taskId}`, 30_000, () =>
+        buildTaskReport(taskId, authorization),
       );
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(report));
