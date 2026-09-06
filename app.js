@@ -45,28 +45,70 @@ function setSummary(report) {
   document.getElementById("vrbValue").textContent = formatHours(report.summary.vrbSeconds);
   document.getElementById("vrb15Value").textContent = formatHours(report.summary.vrb15Seconds);
   document.getElementById("vrb2Value").textContent = formatHours(report.summary.vrb2Seconds);
+  document.getElementById("vrbTotalValue").textContent = formatHours(
+    report.summary.vrbSeconds + report.summary.vrb15Seconds + report.summary.vrb2Seconds,
+  );
   document.getElementById("cleanValue").textContent = formatHours(report.summary.cleanSeconds);
+}
+
+function formatDate(value) {
+  if (!value) return "Дата не указана";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" }).format(date);
+}
+
+function formatAsOf(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Учёт времени по задаче";
+  const months = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+  ];
+  const pad = (number) => String(number).padStart(2, "0");
+  return `Учёт времени по задаче на ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function renderEmployee(employee) {
   const categoryRows = Object.entries(employee.categories)
     .filter(([, value]) => value.seconds > 0)
-    .map(([name, value]) => `
-      <li><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong></li>
-    `)
+    .map(([name, value]) => {
+      const records = [...value.records]
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+        .map((entry) => `
+          <li><time>${escapeHtml(formatDate(entry.date))}</time><span>${escapeHtml(entry.comment)}</span><strong>${formatHours(entry.seconds)}</strong></li>
+        `)
+        .join("");
+      return `
+        <li class="tag-group">
+          <div class="tag-group__head"><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong></div>
+          <ul class="tag-records">${records}</ul>
+        </li>
+      `;
+    })
     .join("");
   const details = categoryRows
     ? `<details class="tags"><summary>Время с хештегами <span>${formatHours(Object.values(employee.categories).reduce((sum, item) => sum + item.seconds, 0))}</span></summary><ul>${categoryRows}</ul></details>`
+    : "";
+  const untaggedRows = employee.untaggedEntries
+    .map((entry) => `
+      <li><time>${escapeHtml(formatDate(entry.date))}</time><span>${escapeHtml(entry.comment)}</span><strong>${formatHours(entry.seconds)}</strong></li>
+    `)
+    .join("");
+  const untaggedDetails = untaggedRows
+    ? `<details class="untagged"><summary>Время без хэштега <span>${formatHours(employee.untaggedSeconds)}</span></summary><ul>${untaggedRows}</ul></details>`
     : "";
 
   return `
     <article class="employee">
       <div class="employee__top">
-        <h3>${escapeHtml(employee.name)}</h3>
+        <div class="employee__name"><h3>${escapeHtml(employee.name)}</h3><span>${employee.entries} записей</span></div>
         <div class="employee__metric"><span>Всего</span><strong>${formatHours(employee.totalSeconds)}</strong></div>
         <div class="employee__metric employee__metric--clean"><span>Чистое время</span><strong>${formatHours(employee.cleanSeconds)}</strong></div>
       </div>
       ${details}
+      ${untaggedDetails}
     </article>
   `;
 }
@@ -109,6 +151,7 @@ async function loadReport(taskId) {
     if (!response.ok) throw new Error(report?.error || `Ошибка ${response.status}`);
 
     taskIdEl.textContent = `ID ${report.taskId}`;
+    document.getElementById("asOf").textContent = formatAsOf(report.generatedAt);
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
