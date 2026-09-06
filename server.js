@@ -227,14 +227,21 @@ async function buildTaskReport(taskId, authorization) {
   const totalSeconds = entries.reduce((sum, entry) => sum + (Number(entry?.seconds) || 0), 0);
   const elrosSeconds = categoryTotals["Элрос"];
   const trainingSeconds = categoryTotals["Обучение"];
-  const vrbSeconds = categoryTotals["ВРБ"] + categoryTotals["ВРБ15"] + categoryTotals["ВРБ2"];
+  const vrbSeconds = categoryTotals["ВРБ"];
+  const vrb15Seconds = categoryTotals["ВРБ15"];
+  const vrb2Seconds = categoryTotals["ВРБ2"];
   const groupedDepartments = [...byDepartment.entries()]
     .map(([name, employees]) => ({
       name,
       employees: [...employees.values()]
         .map((employee) => ({
           ...employee,
-          cleanSeconds: employee.totalSeconds - employee.categories["Элрос"].seconds - employee.categories["Обучение"].seconds,
+          cleanSeconds:
+            employee.totalSeconds -
+            employee.categories["Элрос"].seconds -
+            employee.categories["Обучение"].seconds +
+            employee.categories["ВРБ15"].seconds * 0.5 +
+            employee.categories["ВРБ2"].seconds,
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "ru")),
     }))
@@ -252,7 +259,14 @@ async function buildTaskReport(taskId, authorization) {
       elrosSeconds,
       trainingSeconds,
       vrbSeconds,
-      cleanSeconds: totalSeconds - elrosSeconds - trainingSeconds,
+      vrb15Seconds,
+      vrb2Seconds,
+      cleanSeconds:
+        totalSeconds -
+        elrosSeconds -
+        trainingSeconds +
+        vrb15Seconds * 0.5 +
+        vrb2Seconds,
     },
     departments: groupedDepartments,
   };
