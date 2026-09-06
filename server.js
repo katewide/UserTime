@@ -113,7 +113,6 @@ async function fetchTaskTimeEntries(taskId, authorization) {
   return { entries, total };
 }
 
-async function fetchUserNames(authorization) {
 async function fetchUsers(authorization) {
   // The default users page is small. Time entries may refer to employees with
   // high IDs, so ask VibeCode to collect every employee page for this portal.
@@ -125,7 +124,6 @@ async function fetchUsers(authorization) {
       [u?.lastName, u?.name, u?.secondName].filter(Boolean).join(" ") ||
       u?.login ||
       "";
-    map.set(String(u?.id), name || `ID ${u?.id}`);
     map.set(String(u?.id), {
       name: name || `ID ${u?.id}`,
       departmentIds: Array.isArray(u?.departmentId) ? u.departmentId : [],
@@ -144,11 +142,6 @@ async function fetchDepartments(authorization) {
 }
 
 function formatDuration(totalSeconds) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
-  if (hours === 0) return `${minutes} мин`;
-  if (minutes === 0) return `${hours} ч`;
-  return `${hours} ч ${minutes} мин`;
   return `${(totalSeconds / 3600).toFixed(2).replace(".", ",")} ч`;
 }
 
@@ -180,7 +173,6 @@ function classifyTimeEntry(entry) {
 const CATEGORY_ORDER = ["Обучение", "Элрос", "ВРБ", "ВРБ15", "ВРБ2"];
 
 async function buildTaskReport(taskId, authorization) {
-  const [timeRes, taskRes] = await Promise.allSettled([
   const [timeRes, taskRes, usersRes, departmentsRes] = await Promise.allSettled([
     fetchTaskTimeEntries(taskId, authorization),
     portal(`/tasks/${taskId}`, { authorization }),
@@ -190,7 +182,6 @@ async function buildTaskReport(taskId, authorization) {
 
   if (timeRes.status === "rejected") throw timeRes.reason;
   const { entries, total } = timeRes.value;
-  const names = await fetchUserNames(authorization);
   if (usersRes.status === "rejected") throw usersRes.reason;
   if (departmentsRes.status === "rejected") throw departmentsRes.reason;
   const users = usersRes.value;
@@ -198,7 +189,6 @@ async function buildTaskReport(taskId, authorization) {
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
-  const byUser = new Map();
   const byDepartment = new Map();
   const categoryTotals = Object.fromEntries(CATEGORY_ORDER.map((name) => [name, 0]));
 
@@ -206,10 +196,6 @@ async function buildTaskReport(taskId, authorization) {
     const uid = String(e?.userId ?? "");
     const secs = Number(e?.seconds) || 0;
     if (!uid || secs <= 0) continue;
-    const row = byUser.get(uid) || { userId: uid, seconds: 0, entries: 0 };
-    row.seconds += secs;
-    row.entries += 1;
-    byUser.set(uid, row);
     const category = classifyTimeEntry(e);
     const user = users.get(uid) || { name: `ID ${uid}`, departmentIds: [] };
     const departmentId = user.departmentIds[0] ?? null;
@@ -238,13 +224,6 @@ async function buildTaskReport(taskId, authorization) {
     byDepartment.set(departmentName, department);
   }
 
-  const rows = [...byUser.values()]
-    .map((r) => ({
-      userId: Number(r.userId),
-      name: names.get(r.userId) || `ID ${r.userId}`,
-      seconds: r.seconds,
-      entries: r.entries,
-      label: formatDuration(r.seconds),
   const totalSeconds = entries.reduce((sum, entry) => sum + (Number(entry?.seconds) || 0), 0);
   const elrosSeconds = categoryTotals["Элрос"];
   const trainingSeconds = categoryTotals["Обучение"];
@@ -259,10 +238,8 @@ async function buildTaskReport(taskId, authorization) {
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "ru")),
     }))
-    .sort((a, b) => b.seconds - a.seconds);
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
-  const totalSeconds = rows.reduce((s, r) => s + r.seconds, 0);
   return {
     taskId: Number(taskId),
     taskTitle,
@@ -271,7 +248,6 @@ async function buildTaskReport(taskId, authorization) {
     loadedEntries: entries.length,
     totalSeconds,
     totalLabel: formatDuration(totalSeconds),
-    rows,
     summary: {
       elrosSeconds,
       trainingSeconds,
