@@ -114,6 +114,7 @@ async function fetchTaskTimeEntries(taskId, authorization) {
 }
 
 async function fetchUserNames(authorization) {
+async function fetchUsers(authorization) {
   // The default users page is small. Time entries may refer to employees with
   // high IDs, so ask VibeCode to collect every employee page for this portal.
   const body = await portal("/users?limit=5000", { authorization });
@@ -125,8 +126,21 @@ async function fetchUserNames(authorization) {
       u?.login ||
       "";
     map.set(String(u?.id), name || `ID ${u?.id}`);
+    map.set(String(u?.id), {
+      name: name || `ID ${u?.id}`,
+      departmentIds: Array.isArray(u?.departmentId) ? u.departmentId : [],
+    });
   }
   return map;
+}
+
+async function fetchDepartments(authorization) {
+  const body = await portal("/departments?limit=5000", { authorization });
+  const departments = Array.isArray(body?.data) ? body.data : [];
+  return new Map(departments.map((department) => [
+    String(department.id),
+    department.name || `Отдел ${department.id}`,
+  ]));
 }
 
 function formatDuration(totalSeconds) {
@@ -135,21 +149,59 @@ function formatDuration(totalSeconds) {
   if (hours === 0) return `${minutes} мин`;
   if (minutes === 0) return `${hours} ч`;
   return `${hours} ч ${minutes} мин`;
+  return `${(totalSeconds / 3600).toFixed(2).replace(".", ",")} ч`;
 }
+
+function hasLabel(text, label) {
+  // A hashtag is optional because historical comments may contain the word
+  // without it. Unicode boundaries keep #ВРБ from matching #ВРБ15 or #ВРБ2.
+  const pattern = new RegExp(
+    `(?:^|[^\\p{L}\\p{N}_])#?${label}(?=$|[^\\p{L}\\p{N}_])`,
+    "iu",
+  );
+  return pattern.test(text);
+}
+
+function classifyTimeEntry(entry) {
+  const comment = String(entry?.commentText ?? entry?.comment ?? "");
+  const isTraining = hasLabel(comment, "обучение");
+  const isElros = hasLabel(comment, "элрос");
+
+  // The requested priority is deliberate: training wins over Elros, and both
+  // win over every ВРБ marker when more than one label occurs in a comment.
+  if (isTraining) return "Обучение";
+  if (isElros) return "Элрос";
+  if (hasLabel(comment, "врб15")) return "ВРБ15";
+  if (hasLabel(comment, "врб2")) return "ВРБ2";
+  if (hasLabel(comment, "врб")) return "ВРБ";
+  return "Без категории";
+}
+
+const CATEGORY_ORDER = ["Обучение", "Элрос", "ВРБ", "ВРБ15", "ВРБ2"];
 
 async function buildTaskReport(taskId, authorization) {
   const [timeRes, taskRes] = await Promise.allSettled([
+  const [timeRes, taskRes, usersRes, departmentsRes] = await Promise.allSettled([
     fetchTaskTimeEntries(taskId, authorization),
     portal(`/tasks/${taskId}`, { authorization }),
+    fetchUsers(authorization),
+    fetchDepartments(authorization),
   ]);
 
   if (timeRes.status === "rejected") throw timeRes.reason;
   const { entries, total } = timeRes.value;
   const names = await fetchUserNames(authorization);
+  if (usersRes.status === "rejected") throw usersRes.reason;
+  if (departmentsRes.status === "rejected") throw departmentsRes.reason;
+  const users = usersRes.value;
+  const departmentsById = departmentsRes.value;
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
   const byUser = new Map();
+  const byDepartment = new Map();
+  const categoryTotals = Object.fromEntries(CATEGORY_ORDER.map((name) => [name, 0]));
+
   for (const e of entries) {
     const uid = String(e?.userId ?? "");
     const secs = Number(e?.seconds) || 0;
@@ -158,6 +210,32 @@ async function buildTaskReport(taskId, authorization) {
     row.seconds += secs;
     row.entries += 1;
     byUser.set(uid, row);
+    const category = classifyTimeEntry(e);
+    const user = users.get(uid) || { name: `ID ${uid}`, departmentIds: [] };
+    const departmentId = user.departmentIds[0] ?? null;
+    const departmentName = departmentId
+      ? departmentsById.get(String(departmentId)) || `Отдел ${departmentId}`
+      : "Без отдела";
+    const department = byDepartment.get(departmentName) || new Map();
+    const employee = department.get(uid) || {
+      userId: Number(uid),
+      name: user.name,
+      totalSeconds: 0,
+      entries: 0,
+      categories: Object.fromEntries(CATEGORY_ORDER.map((name) => [name, {
+        seconds: 0,
+        entries: 0,
+      }])),
+    };
+    employee.totalSeconds += secs;
+    employee.entries += 1;
+    if (categoryTotals[category] !== undefined) {
+      categoryTotals[category] += secs;
+      employee.categories[category].seconds += secs;
+      employee.categories[category].entries += 1;
+    }
+    department.set(uid, employee);
+    byDepartment.set(departmentName, department);
   }
 
   const rows = [...byUser.values()]
@@ -167,8 +245,22 @@ async function buildTaskReport(taskId, authorization) {
       seconds: r.seconds,
       entries: r.entries,
       label: formatDuration(r.seconds),
+  const totalSeconds = entries.reduce((sum, entry) => sum + (Number(entry?.seconds) || 0), 0);
+  const elrosSeconds = categoryTotals["Элрос"];
+  const trainingSeconds = categoryTotals["Обучение"];
+  const vrbSeconds = categoryTotals["ВРБ"] + categoryTotals["ВРБ15"] + categoryTotals["ВРБ2"];
+  const groupedDepartments = [...byDepartment.entries()]
+    .map(([name, employees]) => ({
+      name,
+      employees: [...employees.values()]
+        .map((employee) => ({
+          ...employee,
+          cleanSeconds: employee.totalSeconds - employee.categories["Элрос"].seconds - employee.categories["Обучение"].seconds,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ru")),
     }))
     .sort((a, b) => b.seconds - a.seconds);
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
   const totalSeconds = rows.reduce((s, r) => s + r.seconds, 0);
   return {
@@ -180,6 +272,13 @@ async function buildTaskReport(taskId, authorization) {
     totalSeconds,
     totalLabel: formatDuration(totalSeconds),
     rows,
+    summary: {
+      elrosSeconds,
+      trainingSeconds,
+      vrbSeconds,
+      cleanSeconds: totalSeconds - elrosSeconds - trainingSeconds,
+    },
+    departments: groupedDepartments,
   };
 }
 
