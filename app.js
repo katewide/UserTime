@@ -30,6 +30,21 @@ function formatHours(seconds) {
   return `${(Number(seconds || 0) / 3600).toFixed(2).replace(".", ",")} ч`;
 }
 
+function formatRecords(count) {
+  const value = Math.abs(Number(count) || 0);
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const word =
+    lastTwo >= 11 && lastTwo <= 14
+      ? "записей"
+      : last === 1
+        ? "запись"
+        : last >= 2 && last <= 4
+          ? "записи"
+          : "записей";
+  return `${value} ${word}`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -97,18 +112,18 @@ function renderEmployee(employee) {
     `)
     .join("");
   const untaggedDetails = untaggedRows
-    ? `<details class="untagged"><summary>Время без хэштега <span>${formatHours(employee.untaggedSeconds)}</span></summary><ul>${untaggedRows}</ul></details>`
+    ? `<details class="untagged"><summary>Время без хэштегов <span>${formatHours(employee.untaggedSeconds)}</span></summary><ul>${untaggedRows}</ul></details>`
     : "";
 
   return `
     <article class="employee">
       <div class="employee__top">
-        <div class="employee__name"><h3>${escapeHtml(employee.name)}</h3><span>${employee.entries} записей</span></div>
+        <div class="employee__name"><h3>${escapeHtml(employee.name)}</h3><span>${formatRecords(employee.entries)}</span></div>
         <div class="employee__metric"><span>Всего</span><strong>${formatHours(employee.totalSeconds)}</strong></div>
         <div class="employee__metric employee__metric--clean"><span>Чистое время</span><strong>${formatHours(employee.cleanSeconds)}</strong></div>
       </div>
-      ${details}
       ${untaggedDetails}
+      ${details}
     </article>
   `;
 }
@@ -155,7 +170,7 @@ async function loadReport(taskId) {
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
-    meta.textContent = `${employeeCount} чел. · ${report.totalEntries ?? report.loadedEntries} записей`;
+    meta.textContent = `${employeeCount} чел. · ${formatRecords(report.totalEntries ?? report.loadedEntries)}`;
 
     if (employeeCount === 0) {
       state.hidden = false;
