@@ -208,9 +208,11 @@ async function buildTaskReport(taskId, authorization) {
       name: user.name,
       totalSeconds: 0,
       entries: 0,
+      untaggedEntries: [],
       categories: Object.fromEntries(CATEGORY_ORDER.map((name) => [name, {
         seconds: 0,
         entries: 0,
+        records: [],
       }])),
     };
     employee.totalSeconds += secs;
@@ -219,6 +221,17 @@ async function buildTaskReport(taskId, authorization) {
       categoryTotals[category] += secs;
       employee.categories[category].seconds += secs;
       employee.categories[category].entries += 1;
+      employee.categories[category].records.push({
+        date: e?.createdDate ?? e?.dateStart ?? e?.dateStop ?? null,
+        comment: String(e?.commentText ?? e?.comment ?? "Без комментария"),
+        seconds: secs,
+      });
+    } else {
+      employee.untaggedEntries.push({
+        date: e?.createdDate ?? e?.dateStart ?? e?.dateStop ?? null,
+        comment: String(e?.commentText ?? e?.comment ?? "Без комментария"),
+        seconds: secs,
+      });
     }
     department.set(uid, employee);
     byDepartment.set(departmentName, department);
@@ -242,6 +255,10 @@ async function buildTaskReport(taskId, authorization) {
             employee.categories["Обучение"].seconds +
             employee.categories["ВРБ15"].seconds * 0.5 +
             employee.categories["ВРБ2"].seconds,
+          untaggedSeconds: employee.untaggedEntries.reduce(
+            (sum, entry) => sum + entry.seconds,
+            0,
+          ),
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "ru")),
     }))
