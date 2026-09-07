@@ -85,6 +85,17 @@ function formatAsOf(value) {
   return `Учёт времени по задаче на ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+function cleanSecondsForCategory(name, seconds) {
+  if (name === "Элрос" || name === "Обучение") return 0;
+  if (name === "ВРБ15") return seconds * 1.5;
+  if (name === "ВРБ2") return seconds * 2;
+  return seconds;
+}
+
+function renderTimePair(totalSeconds, cleanSeconds) {
+  return `<span class="time-pair"><strong>${formatHours(totalSeconds)}</strong><strong class="time-pair__clean">${formatHours(cleanSeconds)}</strong></span>`;
+}
+
 function renderEmployee(employee) {
   const categoryRows = Object.entries(employee.categories)
     .filter(([, value]) => value.seconds > 0)
@@ -97,14 +108,19 @@ function renderEmployee(employee) {
         .join("");
       return `
         <li class="tag-group">
-          <div class="tag-group__head"><span>${escapeHtml(name)}</span><strong>${formatHours(value.seconds)}</strong></div>
+          <div class="tag-group__head"><span>${escapeHtml(name)}</span>${renderTimePair(value.seconds, cleanSecondsForCategory(name, value.seconds))}</div>
           <ul class="tag-records">${records}</ul>
         </li>
       `;
     })
     .join("");
+  const taggedSeconds = Object.values(employee.categories).reduce((sum, item) => sum + item.seconds, 0);
+  const taggedCleanSeconds = Object.entries(employee.categories).reduce(
+    (sum, [name, item]) => sum + cleanSecondsForCategory(name, item.seconds),
+    0,
+  );
   const details = categoryRows
-    ? `<details class="tags"><summary>Время с хештегами <span>${formatHours(Object.values(employee.categories).reduce((sum, item) => sum + item.seconds, 0))}</span></summary><ul>${categoryRows}</ul></details>`
+    ? `<details class="tags"><summary><span>Время с хештегами</span>${renderTimePair(taggedSeconds, taggedCleanSeconds)}</summary><ul>${categoryRows}</ul></details>`
     : "";
   const untaggedRows = employee.untaggedEntries
     .map((entry) => `
@@ -112,7 +128,7 @@ function renderEmployee(employee) {
     `)
     .join("");
   const untaggedDetails = untaggedRows
-    ? `<details class="untagged"><summary>Время без хэштегов <span>${formatHours(employee.untaggedSeconds)}</span></summary><ul>${untaggedRows}</ul></details>`
+    ? `<details class="untagged"><summary><span>Время без хэштегов</span>${renderTimePair(employee.untaggedSeconds, employee.untaggedSeconds)}</summary><ul>${untaggedRows}</ul></details>`
     : "";
 
   return `
