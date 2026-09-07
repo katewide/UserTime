@@ -132,12 +132,28 @@ function renderDepartments(departments) {
   const target = document.getElementById("departments");
   target.innerHTML = departments
     .map(
-      (department) => `
+      (department) => {
+        const totalSeconds = department.employees.reduce(
+          (sum, employee) => sum + employee.totalSeconds,
+          0,
+        );
+        const cleanSeconds = department.employees.reduce(
+          (sum, employee) => sum + employee.cleanSeconds,
+          0,
+        );
+        return `
         <section class="department">
-          <h2>${escapeHtml(department.name)}</h2>
+          <header class="department__head">
+            <h2>${escapeHtml(department.name)}</h2>
+            <div class="department__summary">
+              <span>Всего <strong>${formatHours(totalSeconds)}</strong></span>
+              <span>Чистое <strong>${formatHours(cleanSeconds)}</strong></span>
+            </div>
+          </header>
           <div class="employees">${department.employees.map(renderEmployee).join("")}</div>
         </section>
-      `,
+      `;
+      },
     )
     .join("");
 }
@@ -148,10 +164,12 @@ async function loadReport(taskId) {
   const target = document.getElementById("departments");
   const taskTitle = document.getElementById("taskTitle");
   const taskIdEl = document.getElementById("taskId");
+  const summary = document.getElementById("summary");
   target.innerHTML = "";
   state.hidden = true;
 
   if (!taskId) {
+    summary.hidden = true;
     meta.textContent = "нет задачи";
     taskTitle.textContent = "Откройте приложение из карточки задачи";
     taskIdEl.textContent = "Контекст задачи не передан";
@@ -167,6 +185,7 @@ async function loadReport(taskId) {
 
     taskIdEl.textContent = `ID ${report.taskId}`;
     document.getElementById("asOf").textContent = formatAsOf(report.generatedAt);
+    summary.hidden = report.totalSeconds <= 0;
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
@@ -179,6 +198,7 @@ async function loadReport(taskId) {
     }
     renderDepartments(report.departments);
   } catch (error) {
+    summary.hidden = true;
     meta.textContent = "не удалось загрузить";
     taskTitle.textContent = "Данные недоступны";
     state.hidden = false;
