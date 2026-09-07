@@ -146,8 +146,8 @@ function renderDepartments(departments) {
           <header class="department__head">
             <h2>${escapeHtml(department.name)}</h2>
             <div class="department__summary">
-              <span>Всего <strong>${formatHours(totalSeconds)}</strong></span>
-              <span>Чистое <strong>${formatHours(cleanSeconds)}</strong></span>
+              <div class="department__metric"><span>Всего</span><strong>${formatHours(totalSeconds)}</strong></div>
+              <div class="department__metric department__metric--clean"><span>Чистое время</span><strong>${formatHours(cleanSeconds)}</strong></div>
             </div>
           </header>
           <div class="employees">${department.employees.map(renderEmployee).join("")}</div>
