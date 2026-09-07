@@ -119,8 +119,8 @@ function renderEmployee(employee) {
     <article class="employee">
       <div class="employee__top">
         <div class="employee__name"><h3>${escapeHtml(employee.name)}</h3><span>${formatRecords(employee.entries)}</span></div>
-        <div class="employee__metric"><span>Всего</span><strong>${formatHours(employee.totalSeconds)}</strong></div>
-        <div class="employee__metric employee__metric--clean"><span>Чистое время</span><strong>${formatHours(employee.cleanSeconds)}</strong></div>
+        <div class="employee__metric"><strong>${formatHours(employee.totalSeconds)}</strong></div>
+        <div class="employee__metric employee__metric--clean"><strong>${formatHours(employee.cleanSeconds)}</strong></div>
       </div>
       ${untaggedDetails}
       ${details}
