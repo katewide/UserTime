@@ -58,7 +58,7 @@ body {
 .summary__main small { display: block; margin-top: 12px; max-width: 250px; font-size: 11px; line-height: 1.4; opacity: .82; }
 .summary strong { display: block; margin-top: 5px; font: 700 25px/1.2 Unbounded, sans-serif; letter-spacing: -.05em; }
 .summary__details { display: grid; grid-template-columns: 1fr; gap: 7px; margin: 0; border-right: 1px solid var(--line); }
-.summary__details-title { display: block; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.summary__details-title { display: block; color: #bd5a34 !important; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .summary__details dl { display: grid; gap: 7px; margin: 0; }
 .summary__details div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .summary__details dt { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
