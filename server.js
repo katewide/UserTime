@@ -56,7 +56,7 @@ async function cached(key, ttlMs, produce) {
   return value;
 }
 
-async function portal(pathname, { method = "GET", authorization = "" } = {}) {
+async function portal(pathname, { method = "GET", authorization = "", body } = {}) {
   if (!KEY || !BASE) {
     const err = new Error("portal_not_connected");
     err.status = 503;
@@ -66,6 +66,7 @@ async function portal(pathname, { method = "GET", authorization = "" } = {}) {
     "X-Api-Key": KEY,
     Accept: "application/json",
   };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
   // In a Bitrix24 placement the VibeCode Gateway injects this short-lived
   // per-user session into the server request. OAuth app keys require it for
   // every API call; it is never exposed to browser JavaScript.
@@ -78,6 +79,7 @@ async function portal(pathname, { method = "GET", authorization = "" } = {}) {
       method,
       headers,
       signal: controller.signal,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
     const body = text ? JSON.parse(text) : null;
@@ -186,7 +188,61 @@ function classifyTimeEntry(entry) {
 
 const CATEGORY_ORDER = ["Обучение", "Элрос", "ВРБ", "ВРБ15", "ВРБ2"];
 
-function parseChecklist(taskData) {
+function formatEstimateNumber(value) {
+  return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
+}
+
+function parseGemmaInterval(value) {
+  const match = /^\s*(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)\s*$/.exec(
+    String(value || ""),
+  );
+  if (!match) return null;
+  const minHours = Number(match[1].replace(",", "."));
+  const maxHours = Number(match[2].replace(",", "."));
+  if (!Number.isFinite(minHours) || !Number.isFinite(maxHours) || minHours < 0 || maxHours < minHours) {
+    return null;
+  }
+  return {
+    minHours,
+    maxHours,
+    label: `${formatEstimateNumber(minHours)}-${formatEstimateNumber(maxHours)} ч.`,
+  };
+}
+
+async function calculateGemmaEstimate(estimate, authorization) {
+  if (!Array.isArray(estimate) || estimate.length === 0) return null;
+  try {
+    const response = await portal("/chat/completions", {
+      method: "POST",
+      authorization,
+      body: {
+        model: "bitrix/google/gemma-4-26B-A4B-it",
+        messages: [
+          {
+            role: "system",
+            content: "Ты суммируешь оценки времени. Прими только строки из сообщения пользователя. Интервал A-B: сложи все A и все B. «до X» и фиксированное X считай как 0-X. Нечитаемые строки игнорируй. Ответь строго одним интервалом min-max только цифрами и дефисом, без пояснений, единиц и Markdown. Если нет ни одной читаемой оценки, ответь пустой строкой.",
+          },
+          { role: "user", content: estimate.join("\n") },
+        ],
+      },
+    });
+    const content =
+      response?.choices?.[0]?.message?.content ??
+      response?.data?.choices?.[0]?.message?.content ??
+      "";
+    return parseGemmaInterval(content);
+  } catch {
+    // Time accounting must still be usable when the optional AI estimate fails.
+    return null;
+  }
+}
+
+function parseLimitHours(limit) {
+  const match = /^(\d+(?:[.,]\d+)?)\s+ч\.$/u.exec(String(limit || "").trim());
+  return match ? Number(match[1].replace(",", ".")) : null;
+}
+
+async function parseChecklist(taskData, authorization) {
   const items = Object.values(taskData?.checklist || {})
     .filter((item) => item && typeof item.title === "string")
     .map((item) => ({
@@ -229,7 +285,12 @@ function parseChecklist(taskData) {
     : "";
   if (!bz && !limit && estimate.length === 0) return null;
 
-  return { bz, limit, estimate };
+  return {
+    bz,
+    limit,
+    estimate,
+    gemmaEstimate: await calculateGemmaEstimate(estimate, authorization),
+  };
 }
 
 async function buildTaskReport(taskId, authorization) {
@@ -249,7 +310,7 @@ async function buildTaskReport(taskId, authorization) {
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
-  const checklist = parseChecklist(taskData);
+  const checklist = await parseChecklist(taskData, authorization);
   const byDepartment = new Map();
   const categoryTotals = Object.fromEntries(CATEGORY_ORDER.map((name) => [name, 0]));
 
@@ -325,6 +386,18 @@ async function buildTaskReport(taskId, authorization) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
+  const cleanSeconds =
+    totalSeconds -
+    elrosSeconds -
+    trainingSeconds +
+    vrb15Seconds * 0.5 +
+    vrb2Seconds;
+  const estimateLimitHours = checklist?.gemmaEstimate?.maxHours ?? null;
+  const fallbackLimitHours = estimateLimitHours === null
+    ? parseLimitHours(checklist?.limit)
+    : null;
+  const budgetHours = estimateLimitHours ?? fallbackLimitHours;
+
   return {
     taskId: Number(taskId),
     taskTitle,
@@ -340,13 +413,15 @@ async function buildTaskReport(taskId, authorization) {
       vrbSeconds,
       vrb15Seconds,
       vrb2Seconds,
-      cleanSeconds:
-        totalSeconds -
-        elrosSeconds -
-        trainingSeconds +
-        vrb15Seconds * 0.5 +
-        vrb2Seconds,
+      cleanSeconds,
     },
+    budget: budgetHours === null
+      ? null
+      : {
+          source: estimateLimitHours === null ? "limit" : "estimate",
+          maxHours: budgetHours,
+          isExceeded: cleanSeconds > budgetHours * 3600,
+        },
     departments: groupedDepartments,
   };
 }
