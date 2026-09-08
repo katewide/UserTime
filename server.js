@@ -216,7 +216,7 @@ async function calculateGemmaEstimate(estimate, authorization) {
       method: "POST",
       authorization,
       payload: {
-        model: "bitrix/google/gemma-4-26B-A4B-it",
+        model: "bitrix/openai/gpt-oss-120b",
         messages: [
           {
             role: "system",
