@@ -87,7 +87,8 @@ body {
 .summary__clean { background: var(--orange-soft); }
 .summary__clean span { color: var(--orange); }
 .summary__clean strong { color: var(--orange); }
-.summary--over-budget .summary__clean strong { color: #c53333; }
+.summary__budget-warning { display: block; margin-top: 8px; color: var(--orange); font-size: 12px; line-height: 1.3; }
+.summary__budget-warning[hidden] { display: none; }
 .summary__clean small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
 .panel { padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: var(--shadow); }
 .panel__head { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
