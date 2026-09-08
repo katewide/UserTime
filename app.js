@@ -207,12 +207,13 @@ async function loadReport(taskId) {
   const taskIdEl = document.getElementById("taskId");
   const summary = document.getElementById("summary");
   const checklist = document.getElementById("taskChecklist");
+  const budgetWarning = document.getElementById("budgetWarning");
   target.innerHTML = "";
   state.hidden = true;
 
   if (!taskId) {
     summary.hidden = true;
-    summary.classList.remove("summary--over-budget");
+    budgetWarning.hidden = true;
     checklist.hidden = true;
     meta.textContent = "нет задачи";
     taskTitle.textContent = "Откройте приложение из карточки задачи";
@@ -230,7 +231,14 @@ async function loadReport(taskId) {
     taskIdEl.textContent = `ID ${report.taskId}`;
     document.getElementById("asOf").textContent = formatAsOf(report.generatedAt);
     summary.hidden = report.totalSeconds <= 0;
-    summary.classList.toggle("summary--over-budget", Boolean(report.budget?.isExceeded));
+    if (report.budget?.isExceeded) {
+      budgetWarning.textContent = report.budget.source === "estimate"
+        ? "❗️ Превышена оценка"
+        : "❗️ Превышен лимит";
+      budgetWarning.hidden = false;
+    } else {
+      budgetWarning.hidden = true;
+    }
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     renderChecklist(report.checklist);
@@ -245,7 +253,7 @@ async function loadReport(taskId) {
     renderDepartments(report.departments);
   } catch (error) {
     summary.hidden = true;
-    summary.classList.remove("summary--over-budget");
+    budgetWarning.hidden = true;
     checklist.hidden = true;
     meta.textContent = "не удалось загрузить";
     taskTitle.textContent = "Данные недоступны";
