@@ -96,16 +96,15 @@ function renderChecklist(checklist) {
   const bzValue = checklist.bz?.url
     ? `<a href="${escapeHtml(checklist.bz.url)}" target="_blank" rel="noreferrer">${escapeHtml(checklist.bz.projectName || checklist.bz.url)}</a>`
     : escapeHtml(checklist.bz?.projectName || "—");
-  const estimateValue = checklist.estimate?.length
-    ? escapeHtml(checklist.estimate.join(", "))
-    : "—";
-  const estimateSource = checklist.gemmaEstimate?.label
-    ? `AI: ${escapeHtml(checklist.gemmaEstimate.label)}`
-    : "AI: —";
+  const hasEstimate = Boolean(checklist.estimate?.length);
+  const hasMultipleEstimates = checklist.estimate?.length > 1;
+  const estimateMarkup = hasEstimate
+    ? `<strong>${escapeHtml(checklist.estimate.join(", "))}</strong>${hasMultipleEstimates && checklist.gemmaEstimate?.label ? `<small>Итого: ${escapeHtml(checklist.gemmaEstimate.label)}</small>` : ""}`
+    : "<small>Оценка отсутствует</small>";
   element.innerHTML = `
     <div class="task-checklist__item"><span>📌 БЗ</span><strong>${bzValue}</strong></div>
     <div class="task-checklist__item"><span>🚀 Лимит</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
-    <div class="task-checklist__item"><span>⏰ Оценка</span><strong>${estimateValue}</strong><small>${estimateSource}</small></div>
+    <div class="task-checklist__item"><span>⏰ Оценка</span>${estimateMarkup}</div>
   `;
   element.hidden = false;
 }
