@@ -56,7 +56,7 @@ async function cached(key, ttlMs, produce) {
   return value;
 }
 
-async function portal(pathname, { method = "GET", authorization = "", body } = {}) {
+async function portal(pathname, { method = "GET", authorization = "", payload } = {}) {
   if (!KEY || !BASE) {
     const err = new Error("portal_not_connected");
     err.status = 503;
@@ -66,7 +66,7 @@ async function portal(pathname, { method = "GET", authorization = "", body } = {
     "X-Api-Key": KEY,
     Accept: "application/json",
   };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (payload !== undefined) headers["Content-Type"] = "application/json";
   // In a Bitrix24 placement the VibeCode Gateway injects this short-lived
   // per-user session into the server request. OAuth app keys require it for
   // every API call; it is never exposed to browser JavaScript.
@@ -79,16 +79,16 @@ async function portal(pathname, { method = "GET", authorization = "", body } = {
       method,
       headers,
       signal: controller.signal,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: payload === undefined ? undefined : JSON.stringify(payload),
     });
     const text = await res.text();
-    const body = text ? JSON.parse(text) : null;
+    const responseBody = text ? JSON.parse(text) : null;
     if (!res.ok) {
-      const err = new Error(body?.error?.message || `portal_error_${res.status}`);
+      const err = new Error(responseBody?.error?.message || `portal_error_${res.status}`);
       err.status = res.status;
       throw err;
     }
-    return body;
+    return responseBody;
   } catch (error) {
     if (error?.name === "AbortError") {
       const err = new Error(`Превышено время ожидания ответа портала: ${pathname}`);
@@ -215,7 +215,7 @@ async function calculateGemmaEstimate(estimate, authorization) {
     const response = await portal("/chat/completions", {
       method: "POST",
       authorization,
-      body: {
+      payload: {
         model: "bitrix/google/gemma-4-26B-A4B-it",
         messages: [
           {
