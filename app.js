@@ -96,12 +96,12 @@ function renderChecklist(checklist) {
   const bzValue = checklist.bz?.url
     ? `<a href="${escapeHtml(checklist.bz.url)}" target="_blank" rel="noreferrer">${escapeHtml(checklist.bz.projectName || checklist.bz.url)}</a>`
     : escapeHtml(checklist.bz?.projectName || "—");
-  const estimateSource = checklist.estimate?.length
-    ? `Из чек-листа: ${escapeHtml(checklist.estimate.join(", "))}`
-    : "Оценка не указана";
-  const estimateValue = checklist.gemmaEstimate?.label
-    ? `Gemma: ${escapeHtml(checklist.gemmaEstimate.label)}`
+  const estimateValue = checklist.estimate?.length
+    ? escapeHtml(checklist.estimate.join(", "))
     : "—";
+  const estimateSource = checklist.gemmaEstimate?.label
+    ? `AI: ${escapeHtml(checklist.gemmaEstimate.label)}`
+    : "AI: —";
   element.innerHTML = `
     <div class="task-checklist__item"><span>📌 БЗ</span><strong>${bzValue}</strong></div>
     <div class="task-checklist__item"><span>🚀 Лимит</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
