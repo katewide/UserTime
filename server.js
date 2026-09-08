@@ -71,18 +71,32 @@ async function portal(pathname, { method = "GET", authorization = "" } = {}) {
   // every API call; it is never exposed to browser JavaScript.
   if (authorization) headers.Authorization = authorization;
 
-  const res = await fetch(`${BASE}${pathname}`, {
-    method,
-    headers,
-  });
-  const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
-  if (!res.ok) {
-    const err = new Error(body?.error?.message || `portal_error_${res.status}`);
-    err.status = res.status;
-    throw err;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
+  try {
+    const res = await fetch(`${BASE}${pathname}`, {
+      method,
+      headers,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    const body = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      const err = new Error(body?.error?.message || `portal_error_${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const err = new Error(`Превышено время ожидания ответа портала: ${pathname}`);
+      err.status = 504;
+      throw err;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return body;
 }
 
 async function fetchTaskTimeEntries(taskId, authorization) {
