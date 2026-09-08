@@ -172,6 +172,52 @@ function classifyTimeEntry(entry) {
 
 const CATEGORY_ORDER = ["Обучение", "Элрос", "ВРБ", "ВРБ15", "ВРБ2"];
 
+function parseChecklist(taskData) {
+  const items = Object.values(taskData?.checklist || {})
+    .filter((item) => item && typeof item.title === "string")
+    .map((item) => ({
+      id: Number(item.id),
+      title: item.title.trim(),
+    }));
+  if (items.length === 0) return null;
+
+  const bzItem = items.find((item) => /(?:📌\s*)?БЗ\s*:/iu.test(item.title));
+  const limitItem = items.find((item) => /(?:🚀\s*)?Лимит\s*:/iu.test(item.title));
+  const estimateItem = items.find((item) => /(?:⏰\s*)?Оценка\s*:/iu.test(item.title));
+  const ignoredIds = new Set([bzItem?.id, limitItem?.id, estimateItem?.id]);
+
+  const estimate = items
+    .filter((item) => {
+      if (ignoredIds.has(item.id)) return false;
+      return !/^BX_CHECKLIST(?:_|$)/iu.test(item.title);
+    })
+    .sort((a, b) => a.id - b.id)
+    .map((item) => item.title);
+
+  let bz = null;
+  if (bzItem) {
+    const bbcode = /\[url=(https?:\/\/[^\]]+)\]([\s\S]*?)\[\/url\]/iu.exec(bzItem.title);
+    const urlMatch = /https?:\/\/[^\s\]]+/iu.exec(bzItem.title);
+    const url = bbcode?.[1] || urlMatch?.[0] || "";
+    const beforeLink = bzItem.title
+      .replace(/^(?:📌\s*)?БЗ\s*:\s*/iu, "")
+      .replace(/\[url=https?:\/\/[^\]]+\][\s\S]*?\[\/url\]/iu, "")
+      .replace(/https?:\/\/\S+/iu, "")
+      .trim();
+    bz = {
+      projectName: (bbcode?.[2] || beforeLink).trim(),
+      url,
+    };
+  }
+
+  const limit = limitItem
+    ? limitItem.title.replace(/^(?:🚀\s*)?Лимит\s*:\s*/iu, "").trim()
+    : "";
+  if (!bz && !limit && estimate.length === 0) return null;
+
+  return { bz, limit, estimate };
+}
+
 async function buildTaskReport(taskId, authorization) {
   const [timeRes, taskRes, usersRes, departmentsRes] = await Promise.allSettled([
     fetchTaskTimeEntries(taskId, authorization),
@@ -189,6 +235,7 @@ async function buildTaskReport(taskId, authorization) {
 
   const taskData = taskRes.status === "fulfilled" ? taskRes.value?.data : null;
   const taskTitle = taskData?.title || taskData?.name || "";
+  const checklist = parseChecklist(taskData);
   const byDepartment = new Map();
   const categoryTotals = Object.fromEntries(CATEGORY_ORDER.map((name) => [name, 0]));
 
@@ -267,6 +314,7 @@ async function buildTaskReport(taskId, authorization) {
   return {
     taskId: Number(taskId),
     taskTitle,
+    checklist,
     generatedAt: new Date().toISOString(),
     totalEntries: total ?? entries.length,
     loadedEntries: entries.length,
