@@ -100,9 +100,9 @@ function renderChecklist(checklist) {
     ? escapeHtml(checklist.estimate.join(", "))
     : "—";
   element.innerHTML = `
-    <div class="task-checklist__item"><span>📌 БЗ:</span><strong>${bzValue}</strong></div>
-    <div class="task-checklist__item"><span>🚀 Лимит:</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
-    <div class="task-checklist__item"><span>⏰ Оценка:</span><strong>${estimateValue}</strong></div>
+    <div class="task-checklist__item"><span>📌 БЗ</span><strong>${bzValue}</strong></div>
+    <div class="task-checklist__item"><span>🚀 Лимит</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
+    <div class="task-checklist__item"><span>⏰ Оценка</span><strong>${estimateValue}</strong></div>
   `;
   element.hidden = false;
 }
