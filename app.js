@@ -103,8 +103,8 @@ function renderChecklist(checklist) {
     : "<small>Оценка отсутствует</small>";
   element.innerHTML = `
     <div class="task-checklist__item"><span>📌 БЗ</span><strong>${bzValue}</strong></div>
-    <div class="task-checklist__item"><span>🚀 Лимит</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
     <div class="task-checklist__item"><span>⏰ Оценка</span>${estimateMarkup}</div>
+    <div class="task-checklist__item"><span>🚀 Лимит</span><strong>${escapeHtml(checklist.limit || "—")}</strong></div>
   `;
   element.hidden = false;
 }
