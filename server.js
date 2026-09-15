@@ -254,12 +254,21 @@ async function parseChecklist(taskData, authorization) {
   const bzItem = items.find((item) => /(?:📌\s*)?БЗ\s*:/iu.test(item.title));
   const limitItem = items.find((item) => /(?:🚀\s*)?Лимит\s*:/iu.test(item.title));
   const estimateItem = items.find((item) => /(?:⏰\s*)?Оценка\s*:/iu.test(item.title));
-  const ignoredIds = new Set([bzItem?.id, limitItem?.id, estimateItem?.id]);
-
   const estimate = items
-    .filter((item) => {
-      if (ignoredIds.has(item.id)) return false;
-      return !/^BX_CHECKLIST(?:_|$)/iu.test(item.title);
+    .flatMap((item) => {
+      if (/^BX_CHECKLIST(?:_|$)/iu.test(item.title)) return [];
+      if (item.id === bzItem?.id || item.id === limitItem?.id) return [];
+
+      // Иногда сама строка-заголовок содержит оценку: «⏰ Оценка: 4ч. 15.09.26».
+      // Сохраняем её как обычную запись оценки, убрав только подпись.
+      if (item.id === estimateItem?.id) {
+        const inlineEstimate = item.title
+          .replace(/^(?:⏰\s*)?Оценка\s*:\s*/iu, "")
+          .trim();
+        return inlineEstimate ? [{ id: item.id, title: inlineEstimate }] : [];
+      }
+
+      return [{ id: item.id, title: item.title }];
     })
     .sort((a, b) => a.id - b.id)
     .map((item) => item.title);
