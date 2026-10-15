@@ -283,7 +283,7 @@ async function loadReport(taskId) {
       `/api/task-report?taskId=${taskId}`,
       () => {
         state.hidden = false;
-        state.innerHTML = `<video class="state__animation" autoplay loop muted playsinline aria-hidden="true"><source src="/assets/error-sticker.webm" type="video/webm"></video><div role="status">Приложение временно недоступно. Повторяем подключение…</div>`;
+        state.innerHTML = `<img class="state__animation" src="/assets/error-sticker.webp" alt="" width="240" height="240"><div role="status">Приложение временно недоступно. Повторяем подключение…</div>`;
       },
     );
     state.hidden = true;
@@ -328,7 +328,7 @@ async function loadReport(taskId) {
     taskTitle.textContent = "Данные недоступны";
     state.hidden = false;
     state.className = "state state--error";
-    state.innerHTML = `<video class="state__animation" autoplay loop muted playsinline aria-hidden="true"><source src="/assets/error-sticker.webm" type="video/webm"></video><strong>Раскатистый бас Зимосколочки доносит до окружающих код ошибки:</strong><br>${escapeHtml(error.message || "Неизвестная ошибка")}<br><button class="state__retry" id="retryBtn">Повторить</button>`;
+    state.innerHTML = `<img class="state__animation" src="/assets/error-sticker.webp" alt="" width="240" height="240"><strong>Раскатистый бас Зимосколочки доносит до окружающих код ошибки:</strong><br>${escapeHtml(error.message || "Неизвестная ошибка")}<br><button class="state__retry" id="retryBtn">Повторить</button>`;
     document.getElementById("retryBtn").addEventListener("click", () => loadReport(taskId));
   }
 }

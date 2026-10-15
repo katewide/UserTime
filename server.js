@@ -560,6 +560,8 @@ const server = http.createServer(async (req, res) => {
         ? "text/javascript; charset=utf-8"
         : ext === ".css"
         ? "text/css; charset=utf-8"
+        : ext === ".webp"
+        ? "image/webp"
         : ext === ".webm"
         ? "video/webm"
         : "application/octet-stream";
