@@ -155,3 +155,6 @@ body {
   .employee__metric--clean { text-align: right; }
   .time-pair { grid-template-columns: auto auto; gap: 14px; }
 }
+
+.state__animation { display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto 16px; }
+@media (prefers-reduced-motion: reduce) { .state__animation { display: none; } }

@@ -283,7 +283,7 @@ async function loadReport(taskId) {
       `/api/task-report?taskId=${taskId}`,
       () => {
         state.hidden = false;
-        state.textContent = "Приложение временно недоступно. Повторяем подключение…";
+        state.innerHTML = `<video class="state__animation" autoplay loop muted playsinline aria-hidden="true"><source src="/assets/error-sticker.webm" type="video/webm"></video><div role="status">Приложение временно недоступно. Повторяем подключение…</div>`;
       },
     );
     state.hidden = true;
@@ -328,7 +328,7 @@ async function loadReport(taskId) {
     taskTitle.textContent = "Данные недоступны";
     state.hidden = false;
     state.className = "state state--error";
-    state.innerHTML = `<strong>Не удалось получить данные портала.</strong><br>${escapeHtml(error.message || "Неизвестная ошибка")}<br><button class="state__retry" id="retryBtn">Повторить</button>`;
+    state.innerHTML = `<video class="state__animation" autoplay loop muted playsinline aria-hidden="true"><source src="/assets/error-sticker.webm" type="video/webm"></video><strong>Не удалось получить данные портала.</strong><br>${escapeHtml(error.message || "Неизвестная ошибка")}<br><button class="state__retry" id="retryBtn">Повторить</button>`;
     document.getElementById("retryBtn").addEventListener("click", () => loadReport(taskId));
   }
 }
