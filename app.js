@@ -213,7 +213,7 @@ function renderDepartments(departments) {
 
 async function fetchWithStartupRetry(url, onRetry = () => {}) {
   for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(25_000) });
+    const response = await fetch(url);
     const body = await response.json().catch(() => null);
     const transient = ["BH_APP_STARTING", "BH_SERVER_WAKING", "BH_TUNNEL_CONNECTING"]
       .includes(body?.error?.code);
@@ -234,23 +234,6 @@ function showBudget(budget) {
   element.hidden = !budget?.isExceeded;
   if (budget?.isExceeded) element.textContent = budget.source === "estimate"
     ? "❗️ Превышена оценка" : "❗️ Превышен лимит";
-}
-
-async function loadEstimate(taskId, report) {
-  if (!report.checklist?.estimate?.length) return;
-  const target = document.getElementById("taskChecklist");
-  const note = document.createElement("small");
-  note.textContent = "Уточняем итоговую оценку…";
-  target.lastElementChild.append(note);
-  try {
-    const { response, body } = await fetchWithStartupRetry(`/api/task-estimate?taskId=${taskId}`);
-    if (!response.ok || !body?.estimate) throw new Error("estimate_unavailable");
-    report.checklist.gemmaEstimate = body.estimate;
-    renderChecklist(report.checklist);
-    showBudget({ source: "estimate", isExceeded: report.summary.cleanSeconds > body.estimate.maxHours * 3600 });
-  } catch {
-    note.textContent = "Итоговая оценка временно недоступна; проверка превышения — только по лимиту.";
-  }
 }
 
 async function loadReport(taskId) {
@@ -310,7 +293,6 @@ async function loadReport(taskId) {
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     renderChecklist(report.checklist);
-    void loadEstimate(taskId, report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
     meta.textContent = `${employeeCount} чел. · ${formatRecords(report.totalEntries ?? report.loadedEntries)}`;
 

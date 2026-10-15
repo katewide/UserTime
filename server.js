@@ -276,7 +276,7 @@ function parseLimitHours(limit) {
   return match ? Number(match[1].replace(",", ".")) : null;
 }
 
-async function parseChecklist(taskData, authorization, withEstimate = false) {
+async function parseChecklist(taskData, authorization) {
   const items = Object.values(taskData?.checklist || {})
     .filter((item) => item && typeof item.title === "string")
     .map((item) => ({
@@ -332,7 +332,7 @@ async function parseChecklist(taskData, authorization, withEstimate = false) {
     bz,
     limit,
     estimate,
-    gemmaEstimate: withEstimate ? await calculateGemmaEstimate(estimate, authorization) : null,
+    gemmaEstimate: await calculateGemmaEstimate(estimate, authorization),
   };
 }
 
@@ -478,11 +478,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/task-report" || url.pathname === "/api/task-estimate") {
+  if (url.pathname === "/api/task-report") {
     const requestId = randomUUID();
     const started = Date.now();
     const controller = new AbortController();
-    const deadline = setTimeout(() => controller.abort(), 18_000);
     console.info(JSON.stringify({ event: "request-start", requestId, route: url.pathname, taskId: url.searchParams.get("taskId") }));
     res.setHeader("X-Request-Id", requestId);
     res.setHeader("Cache-Control", "no-store");
@@ -505,11 +504,6 @@ const server = http.createServer(async (req, res) => {
       const session = createHash("sha256").update(authorization).digest("hex");
       const report = await requestContext.run({ id: requestId, signal: controller.signal }, () =>
         cached(`${url.pathname}:${userId}:${session}:${taskId}`, 30_000, async () => {
-          if (url.pathname === "/api/task-estimate") {
-            const task = await portal(`/tasks/${taskId}`, { authorization });
-            const checklist = await parseChecklist(task?.data, authorization, true);
-            return { estimate: checklist?.gemmaEstimate ?? null };
-          }
           return buildTaskReport(taskId, authorization);
         }),
       );
@@ -535,7 +529,6 @@ const server = http.createServer(async (req, res) => {
         }),
       );
     } finally {
-      clearTimeout(deadline);
       console.info(JSON.stringify({ event: "request-end", requestId, status: res.statusCode, elapsedMs: Date.now() - started }));
     }
     return;
