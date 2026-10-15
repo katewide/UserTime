@@ -1,3 +1,16 @@
+function errorText(value) {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    const parts = ["message", "description", "error_description", "error", "code"]
+      .map((key) => value[key] === undefined ? "" : errorText(value[key]))
+      .filter(Boolean);
+    if (parts.length) return [...new Set(parts)].join("; ");
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
 function positiveInteger(value) {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -209,6 +222,7 @@ async function loadReport(taskId) {
   const budgetWarning = document.getElementById("budgetWarning");
   target.innerHTML = "";
   state.hidden = true;
+  state.className = "state";
 
   if (!taskId) {
     summary.hidden = true;
@@ -225,7 +239,20 @@ async function loadReport(taskId) {
   try {
     const response = await fetch(`/api/task-report?taskId=${taskId}`);
     const report = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(report?.error || `Ошибка ${response.status}`);
+    if (!response.ok) {
+      const details = report?.details;
+      const context = [
+        `Задача: ${taskId}`,
+        `HTTP: ${response.status}`,
+        details?.endpoint ? `Запрос: ${details.endpoint}` : "",
+        details?.upstreamStatus ? `HTTP портала: ${details.upstreamStatus}` : "",
+        details?.occurredAt ? `Время: ${details.occurredAt}` : "",
+      ].filter(Boolean).join(" · ");
+      throw new Error(`${errorText(report?.error) || "Сервер не вернул описание ошибки"}. ${context}`);
+    }
+    if (!report || !Array.isArray(report.departments)) {
+      throw new Error(`Некорректный ответ сервера для задачи ${taskId} (HTTP ${response.status})`);
+    }
 
     taskIdEl.textContent = `ID ${report.taskId}`;
     document.getElementById("asOf").textContent = formatAsOf(report.generatedAt);

@@ -56,6 +56,19 @@ async function cached(key, ttlMs, produce) {
   return value;
 }
 
+function errorText(value) {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    const parts = ["message", "description", "error_description", "error", "code"]
+      .map((key) => value[key] === undefined ? "" : errorText(value[key]))
+      .filter(Boolean);
+    if (parts.length) return [...new Set(parts)].join("; ");
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
 async function portal(pathname, { method = "GET", authorization = "", payload } = {}) {
   if (!KEY || !BASE) {
     const err = new Error("portal_not_connected");
@@ -82,10 +95,19 @@ async function portal(pathname, { method = "GET", authorization = "", payload } 
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
     const text = await res.text();
-    const responseBody = text ? JSON.parse(text) : null;
+    let responseBody;
+    try {
+      responseBody = text ? JSON.parse(text) : null;
+    } catch {
+      const err = new Error("Портал вернул ответ не в формате JSON");
+      err.status = res.ok ? 502 : res.status;
+      err.upstreamStatus = res.status;
+      throw err;
+    }
     if (!res.ok) {
-      const err = new Error(responseBody?.error?.message || `portal_error_${res.status}`);
+      const err = new Error(errorText(responseBody?.error ?? responseBody) || `portal_error_${res.status}`);
       err.status = res.status;
+      err.upstreamStatus = res.status;
       throw err;
     }
     return responseBody;
@@ -93,8 +115,11 @@ async function portal(pathname, { method = "GET", authorization = "", payload } 
     if (error?.name === "AbortError") {
       const err = new Error(`Превышено время ожидания ответа портала: ${pathname}`);
       err.status = 504;
+      err.portalPath = pathname;
       throw err;
     }
+    error.portalPath = pathname;
+    if (!error.status) error.status = 502;
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -473,7 +498,14 @@ const server = http.createServer(async (req, res) => {
           error:
             status === 503
               ? "Портал не подключён"
-              : err.message || "Не удалось получить данные",
+              : errorText(err.message) || "Не удалось получить данные",
+          details: {
+            taskId: url.searchParams.get("taskId"),
+            endpoint: err.portalPath || null,
+            upstreamStatus: err.upstreamStatus || null,
+            status,
+            occurredAt: new Date().toISOString(),
+          },
         }),
       );
     }
