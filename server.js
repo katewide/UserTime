@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash, randomUUID } from "node:crypto";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
@@ -46,13 +48,15 @@ console.log(
     : `NO portal key — /api/report will answer 503 until it appears`,
 );
 
+const requestContext = new AsyncLocalStorage();
 const cache = new Map();
 async function cached(key, ttlMs, produce) {
   const hit = cache.get(key);
   const now = Date.now();
   if (hit && now - hit.at < ttlMs) return hit.value;
   const value = await produce();
-  cache.set(key, { at: now, value });
+  if (cache.size >= 500) cache.delete(cache.keys().next().value);
+  cache.set(key, { at: Date.now(), value });
   return value;
 }
 
@@ -85,15 +89,19 @@ async function portal(pathname, { method = "GET", authorization = "", payload } 
   // every API call; it is never exposed to browser JavaScript.
   if (authorization) headers.Authorization = authorization;
 
+  const started = Date.now();
+  const context = requestContext.getStore();
+  let upstreamStatus = null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
     const res = await fetch(`${BASE}${pathname}`, {
       method,
       headers,
-      signal: controller.signal,
+      signal: context ? AbortSignal.any([controller.signal, context.signal]) : controller.signal,
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
+    upstreamStatus = res.status;
     const text = await res.text();
     let responseBody;
     try {
@@ -122,6 +130,7 @@ async function portal(pathname, { method = "GET", authorization = "", payload } 
     if (!error.status) error.status = 502;
     throw error;
   } finally {
+    console.info(JSON.stringify({ event: "portal", requestId: context?.id, endpoint: pathname.split("?")[0], status: upstreamStatus, elapsedMs: Date.now() - started }));
     clearTimeout(timeout);
   }
 }
@@ -267,7 +276,7 @@ function parseLimitHours(limit) {
   return match ? Number(match[1].replace(",", ".")) : null;
 }
 
-async function parseChecklist(taskData, authorization) {
+async function parseChecklist(taskData, authorization, withEstimate = false) {
   const items = Object.values(taskData?.checklist || {})
     .filter((item) => item && typeof item.title === "string")
     .map((item) => ({
@@ -323,7 +332,7 @@ async function parseChecklist(taskData, authorization) {
     bz,
     limit,
     estimate,
-    gemmaEstimate: await calculateGemmaEstimate(estimate, authorization),
+    gemmaEstimate: withEstimate ? await calculateGemmaEstimate(estimate, authorization) : null,
   };
 }
 
@@ -469,7 +478,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/task-report") {
+  if (url.pathname === "/api/task-report" || url.pathname === "/api/task-estimate") {
+    const requestId = randomUUID();
+    const started = Date.now();
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 18_000);
+    console.info(JSON.stringify({ event: "request-start", requestId, route: url.pathname, taskId: url.searchParams.get("taskId") }));
+    res.setHeader("X-Request-Id", requestId);
+    res.setHeader("Cache-Control", "no-store");
     try {
       const taskId = Number(url.searchParams.get("taskId"));
       if (!Number.isInteger(taskId) || taskId <= 0) {
@@ -485,8 +501,17 @@ const server = http.createServer(async (req, res) => {
         typeof req.headers["x-vibe-user-id"] === "string"
           ? req.headers["x-vibe-user-id"]
           : "service";
-      const report = await cached(`report:${userId}:${taskId}`, 30_000, () =>
-        buildTaskReport(taskId, authorization),
+      // Scope cached data to the exact session without storing the token in keys/logs.
+      const session = createHash("sha256").update(authorization).digest("hex");
+      const report = await requestContext.run({ id: requestId, signal: controller.signal }, () =>
+        cached(`${url.pathname}:${userId}:${session}:${taskId}`, 30_000, async () => {
+          if (url.pathname === "/api/task-estimate") {
+            const task = await portal(`/tasks/${taskId}`, { authorization });
+            const checklist = await parseChecklist(task?.data, authorization, true);
+            return { estimate: checklist?.gemmaEstimate ?? null };
+          }
+          return buildTaskReport(taskId, authorization);
+        }),
       );
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(report));
@@ -496,10 +521,11 @@ const server = http.createServer(async (req, res) => {
       res.end(
         JSON.stringify({
           error:
-            status === 503
+            err.message === "portal_not_connected"
               ? "Портал не подключён"
               : errorText(err.message) || "Не удалось получить данные",
           details: {
+            requestId,
             taskId: url.searchParams.get("taskId"),
             endpoint: err.portalPath || null,
             upstreamStatus: err.upstreamStatus || null,
@@ -508,6 +534,9 @@ const server = http.createServer(async (req, res) => {
           },
         }),
       );
+    } finally {
+      clearTimeout(deadline);
+      console.info(JSON.stringify({ event: "request-end", requestId, status: res.statusCode, elapsedMs: Date.now() - started }));
     }
     return;
   }

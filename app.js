@@ -211,6 +211,48 @@ function renderDepartments(departments) {
     .join("");
 }
 
+async function fetchWithStartupRetry(url, onRetry = () => {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(25_000) });
+    const body = await response.json().catch(() => null);
+    const transient = ["BH_APP_STARTING", "BH_SERVER_WAKING", "BH_TUNNEL_CONNECTING"]
+      .includes(body?.error?.code);
+    if (!transient || response.status !== 503 || attempt >= 2) return { response, body };
+    const header = response.headers.get("Retry-After");
+    const seconds = header === null ? NaN : Number(header);
+    const wait = header === null ? 2000 * (attempt + 1)
+      : Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+    // Do not retry earlier than the platform permits or wait indefinitely.
+    if (!Number.isFinite(wait) || wait > 15000) return { response, body };
+    onRetry(attempt + 1);
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, wait)));
+  }
+}
+
+function showBudget(budget) {
+  const element = document.getElementById("budgetWarning");
+  element.hidden = !budget?.isExceeded;
+  if (budget?.isExceeded) element.textContent = budget.source === "estimate"
+    ? "❗️ Превышена оценка" : "❗️ Превышен лимит";
+}
+
+async function loadEstimate(taskId, report) {
+  if (!report.checklist?.estimate?.length) return;
+  const target = document.getElementById("taskChecklist");
+  const note = document.createElement("small");
+  note.textContent = "Уточняем итоговую оценку…";
+  target.lastElementChild.append(note);
+  try {
+    const { response, body } = await fetchWithStartupRetry(`/api/task-estimate?taskId=${taskId}`);
+    if (!response.ok || !body?.estimate) throw new Error("estimate_unavailable");
+    report.checklist.gemmaEstimate = body.estimate;
+    renderChecklist(report.checklist);
+    showBudget({ source: "estimate", isExceeded: report.summary.cleanSeconds > body.estimate.maxHours * 3600 });
+  } catch {
+    note.textContent = "Итоговая оценка временно недоступна; проверка превышения — только по лимиту.";
+  }
+}
+
 async function loadReport(taskId) {
   const state = document.getElementById("state");
   const meta = document.getElementById("meta");
@@ -237,13 +279,20 @@ async function loadReport(taskId) {
   }
 
   try {
-    const response = await fetch(`/api/task-report?taskId=${taskId}`);
-    const report = await response.json().catch(() => null);
+    const { response, body: report } = await fetchWithStartupRetry(
+      `/api/task-report?taskId=${taskId}`,
+      () => {
+        state.hidden = false;
+        state.textContent = "Приложение временно недоступно. Повторяем подключение…";
+      },
+    );
+    state.hidden = true;
     if (!response.ok) {
       const details = report?.details;
       const context = [
         `Задача: ${taskId}`,
         `HTTP: ${response.status}`,
+        response.headers.get("X-Request-Id") ? `Запрос ID: ${response.headers.get("X-Request-Id")}` : "",
         details?.endpoint ? `Запрос: ${details.endpoint}` : "",
         details?.upstreamStatus ? `HTTP портала: ${details.upstreamStatus}` : "",
         details?.occurredAt ? `Время: ${details.occurredAt}` : "",
@@ -257,17 +306,11 @@ async function loadReport(taskId) {
     taskIdEl.textContent = `ID ${report.taskId}`;
     document.getElementById("asOf").textContent = formatAsOf(report.generatedAt);
     summary.hidden = report.totalSeconds <= 0;
-    if (report.budget?.isExceeded) {
-      budgetWarning.textContent = report.budget.source === "estimate"
-        ? "❗️ Превышена оценка"
-        : "❗️ Превышен лимит";
-      budgetWarning.hidden = false;
-    } else {
-      budgetWarning.hidden = true;
-    }
+    showBudget(report.budget);
     taskTitle.textContent = report.taskTitle || `Задача ${report.taskId}`;
     setSummary(report);
     renderChecklist(report.checklist);
+    void loadEstimate(taskId, report);
     const employeeCount = report.departments.reduce((sum, item) => sum + item.employees.length, 0);
     meta.textContent = `${employeeCount} чел. · ${formatRecords(report.totalEntries ?? report.loadedEntries)}`;
 
